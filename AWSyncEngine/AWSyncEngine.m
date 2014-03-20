@@ -15,7 +15,6 @@ NSString * const kSDSyncEngineSyncCompletedNotificationName = @"SDSyncEngineSync
 
 @interface AWSyncEngine (){
     NSArray * _result;
-    AWCoreDataController *_coreDataController;
 }
 
 @property (atomic, assign) BOOL syncInProgress;
@@ -42,7 +41,7 @@ NSString * const kSDSyncEngineSyncCompletedNotificationName = @"SDSyncEngineSync
     if (self = [super init]) {
         self.syncInProgress = NO;
         self.syncInterval = kSyncInterval;
-        _coreDataController = [AWCoreDataController new];
+        self.coreDataController = [AWCoreDataController new];
     }
     return self;
 }
@@ -69,12 +68,12 @@ NSString * const kSDSyncEngineSyncCompletedNotificationName = @"SDSyncEngineSync
     dispatch_async(dispatch_get_main_queue(), ^{
         [self setInitialSyncCompleted];
         NSError *error = nil;
-        [_coreDataController saveBackgroundContext];
+        [self.coreDataController saveBackgroundContext];
         if (error) {
             NSLog(@"Error saving background context after creating objects on server: %@", error);
         }
         
-        [_coreDataController saveMasterContext];
+        [self.coreDataController saveMasterContext];
         [[NSNotificationCenter defaultCenter]
          postNotificationName:kSDSyncEngineSyncCompletedNotificationName
          object:nil];
@@ -112,19 +111,13 @@ NSString * const kSDSyncEngineSyncCompletedNotificationName = @"SDSyncEngineSync
     return true;
 }
 
+- (NSDate*)lastSynced
+{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    return [defaults valueForKey:@"lastSynced"];
+}
 
 #warning hardcoded return value (leave it till if find out if needed - its working like it is)
-- (BOOL)initialSyncComplete
-{
-    return NO;
-    //return [[[NSUserDefaults standardUserDefaults] valueForKey:kSDSyncEngineInitialCompleteKey] boolValue];
-}
-
-- (void)setInitialSyncCompleted
-{
-    [[NSUserDefaults standardUserDefaults] setValue:[NSNumber numberWithBool:YES] forKey:kSDSyncEngineInitialCompleteKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
-}
 
 - (void)syncObjects
 {

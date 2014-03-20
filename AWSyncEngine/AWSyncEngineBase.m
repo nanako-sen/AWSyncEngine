@@ -8,6 +8,7 @@
 
 #import "AWSyncEngineBase.h"
 
+NSString * const kSDSyncEngineInitialCompleteKey = @"SDSyncEngineInitialSyncCompleted";
 
 
 @interface AWSyncEngineBase () {
@@ -37,9 +38,10 @@
     return self;
 }
 
+#pragma mark - register objects to sync
+
 - (void)registerNSManagedObjectToSync:(AWSyncMappingObject*)mObject
 {
-    
     if (!self.registeredClassesToSync) {
         self.registeredClassesToSync = [NSMutableArray array];
     }
@@ -61,29 +63,18 @@
 }
 
 
-- (NSDate*)lastSynced
-{
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    return [defaults valueForKey:@"lastSynced"];
-}
-
 
 # pragma mark - ManagedObject mapping
 
-- (void)newManagedObjectForObject:(AWSyncMappingObject *)mObject forRecord:(NSDictionary *)record
-{
-    (void)[self createManagedObjectForObject:mObject forRecord:record];
-}
 
 - (NSManagedObject*)createManagedObjectForObject:(AWSyncMappingObject *)mObject forRecord:(NSDictionary *)record
 {
-    
     NSManagedObject *newManagedObject = [NSEntityDescription insertNewObjectForEntityForName:[mObject stringClassName]
                                                                       inManagedObjectContext:_backgroundManagedObjectContext];
     
     [self setAttributes:mObject.attributeMappingDictionary fromRecords:record forObject:newManagedObject];
     
-    [mObject.relatedObjects enumerateObjectsUsingBlock:^(id obj, BOOL *stop) {
+    [mObject.relatedMappingObjects enumerateObjectsUsingBlock:^(id obj, BOOL *stop) {
         AWSyncMappingObject *mo = (AWSyncMappingObject*)obj;
         if ([record objectForKey:mo.jsonRootAttribute] != nil) {
             if ([[record objectForKey:mo.jsonRootAttribute] isKindOfClass:[NSArray class]]) {
@@ -113,7 +104,6 @@
     
     for (AWSyncMappingObject *mObject in self.registeredClassesToSync) {
         NSString *className = mObject.stringClassName;
-        
         AWAFParseAPIClient *parseAPIClient = [[AWAFParseAPIClient alloc] initWithBaseURL:self.baseUrl];
         
         NSMutableURLRequest *request = [NSMutableURLRequest new];
@@ -146,27 +136,30 @@
                                                            }
                                                          completionBlock:^(NSArray *operations) {
                                                              NSLog(@"All operations in batch complete Push");
-                                                             
+                                                             // Processing data into core data
                                                              for (AWSyncMappingObject* mObject in self.registeredClassesToSync) {
                                                                  NSString *className = [mObject stringClassName];
+                                                                 NSDictionary *JSONDictionary = [self.syncFileManager JSONDictionaryForClassWithName:className];
+                                                                 NSArray *records = [JSONDictionary objectForKey:mObject.jsonRootAttribute];
                                                                  
-//                                                                 if (![self initialSyncComplete]) { // todo: would this imove something? import all downloaded data to Core Data for initial sync
-                                                                 
-                                                                     NSDictionary *JSONDictionary = [self.syncFileManager JSONDictionaryForClassWithName:className];
-                                                                     NSArray *records = [JSONDictionary objectForKey:mObject.jsonRootAttribute];
-                                                                     
-                                                                     if (kGET) {
+                                                                 if (kGET) {
+                                                                     if (![self initialSyncComplete]){
+                                                                         for (NSDictionary *record in records) {
+                                                                             [self createManagedObjectForObject:mObject forRecord:record];
+                                                                         }
+                                                                     } else {
                                                                          [self setDeleteFlagForObject:mObject
                                                                                             inContext:_backgroundManagedObjectContext];
                                                                          [self updateOrInsertObject:mObject
                                                                                   forRecordsInArray:records];
                                                                          [self deleteFlagedRecordsForObject:mObject
                                                                                                   inContext:_backgroundManagedObjectContext];
-                                                                     }else if (kPOST) {
-                                                                         [self updateOrInsertObject:mObject forRecordsInArray:records];
                                                                      }
+                                                                 }else if (kPOST) {
+                                                                     [self updateOrInsertObject:mObject forRecordsInArray:records];
+                                                                 }
                                                                      
-//                                                                 }
+//
                                                                  
                                                                  [self saveManagedObjectContext:_backgroundManagedObjectContext];
                                                                  //#warning commented logic
@@ -178,6 +171,16 @@
     [[NSOperationQueue mainQueue] addOperations:batches waitUntilFinished:NO];
 }
 
+- (BOOL)initialSyncComplete
+{
+    return [[[NSUserDefaults standardUserDefaults] valueForKey:kSDSyncEngineInitialCompleteKey] boolValue];
+}
+
+- (void)setInitialSyncCompleted
+{
+    [[NSUserDefaults standardUserDefaults] setValue:[NSNumber numberWithBool:YES] forKey:kSDSyncEngineInitialCompleteKey];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
 
 #pragma mark - delete
 
@@ -229,46 +232,13 @@
     }
 }
 
-- (void)saveManagedObjectContext:(NSManagedObjectContext*)context
-{
-    [context performBlockAndWait:^{
-        NSError *error = nil;
-        if (![context save:&error]) {
-            NSLog(@"Unable to save context");
-        }
-    }];
-}
+
 
 #pragma mark - update MangedObject
 
-- (void)updateOrInsertObject:(AWSyncMappingObject *)mObject forRecordsInArray:(NSArray*)records
+- (NSArray*)getMatchingRecordsForObject:(AWSyncMappingObject*)mObject andJsonRecords:(NSArray*)records
 {
-
-    NSString *updateKeyPropertyName = [[mObject.uniquePropertyJSONAttributeMappingDict allKeys]objectAtIndex:0];
-    NSString *updateKeyJsonPropertyName = [mObject.uniquePropertyJSONAttributeMappingDict objectForKey:updateKeyPropertyName];
-
-    // Get the names to parse in sorted order.
-    // create array from updateKeyJsonProperty value
-    NSArray *filteredJsonPropertyValues = [records valueForKey:updateKeyJsonPropertyName];
-    NSArray *sortedFilteredJsonPropertyValues = [filteredJsonPropertyValues sortedArrayUsingSelector:@selector(compare:)];
-
-    // create the fetch request to get all Employees matching the IDs
-    NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
-    [fetchRequest setEntity:[NSEntityDescription entityForName:mObject.stringClassName inManagedObjectContext:_backgroundManagedObjectContext]];
-
-    NSPredicate *predicate;
-    if ([updateKeyPropertyName isEqualToString:@"objectId"]) {
-        NSMutableArray *objectIdArray = [NSMutableArray new];
-        for (NSString *objectIdStr in sortedFilteredJsonPropertyValues) {
-            NSManagedObjectID *objId = [[_backgroundManagedObjectContext persistentStoreCoordinator] managedObjectIDForURIRepresentation:[NSURL URLWithString:objectIdStr]];
-            [objectIdArray addObject:objId];
-        }
-        predicate = [NSPredicate predicateWithFormat:@"(self IN %@)", objectIdArray];
-    } else{
-        predicate = [NSPredicate predicateWithFormat: @"(self.%@ IN %@)",updateKeyPropertyName, sortedFilteredJsonPropertyValues];
-        [fetchRequest setSortDescriptors:@[ [[NSSortDescriptor alloc] initWithKey: updateKeyPropertyName ascending:YES] ]];
-    }
-    [fetchRequest setPredicate: predicate];
+    NSFetchRequest *fetchRequest = [self fetchRequestForObject:mObject andJsonRecords:records];
     
     // Make sure the results are sorted as well.
     NSError *error;
@@ -277,89 +247,181 @@
         NSLog(@"Error fetching object: %@",error);
     }
     
-    if ([matchingEntities count]>0 && [updateKeyPropertyName isEqualToString:@"objectId"]) {
+    // when property is not objectId results are already sorted via fetchrequest
+    if ([matchingEntities count]>0 && [mObject.uniquePropertyName isEqualToString:@"objectId"]) {
         matchingEntities = [self sortManagedObjectArrayByObjectID:matchingEntities];
     }
+    return matchingEntities;
+}
+
+- (NSFetchRequest*)fetchRequestForObject:(AWSyncMappingObject*)mObject andJsonRecords:(NSArray*)records
+{
+    NSArray *filteredJsonPropertyValues = [records valueForKey:mObject.uniqueJsonAttribute];
+    NSArray *downloadedRecords = [filteredJsonPropertyValues sortedArrayUsingSelector:@selector(compare:)];
+
+    NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
+    [fetchRequest setEntity:[NSEntityDescription entityForName:mObject.stringClassName inManagedObjectContext:_backgroundManagedObjectContext]];
+    NSPredicate *predicate;
+    if ([mObject.uniquePropertyName isEqualToString:@"objectId"]) {
+        NSMutableArray *objectIdArray = [NSMutableArray new];
+        for (NSString *objectIdStr in downloadedRecords) {
+            NSManagedObjectID *objId = [[_backgroundManagedObjectContext persistentStoreCoordinator] managedObjectIDForURIRepresentation:[NSURL URLWithString:objectIdStr]];
+            [objectIdArray addObject:objId];
+        }
+        predicate = [NSPredicate predicateWithFormat:@"(self IN %@)", objectIdArray];
+    } else{
+        predicate = [NSPredicate predicateWithFormat: @"(self.%@ IN %@)",mObject.uniquePropertyName, downloadedRecords];
+        [fetchRequest setSortDescriptors:@[ [[NSSortDescriptor alloc] initWithKey: mObject.uniquePropertyName ascending:YES] ]];
+    }
+    [fetchRequest setPredicate: predicate];
+    return fetchRequest;
+}
+
+- (id)getPropertyValueForUniqueProperty:(NSString*)prop ofObject:(NSManagedObject*)obj
+{
+    id updateKeyPropertyValue;
+    if ([prop isEqualToString:@"objectId"]) {
+        NSURL *objectIdUrl = [obj.objectID URIRepresentation];
+        updateKeyPropertyValue = [objectIdUrl absoluteString];
+    }else
+        updateKeyPropertyValue = [obj valueForKey:prop];
+    return updateKeyPropertyValue;
+}
+
+- (BOOL)jsonValue:(id)jsonValue isEqualTo:(AWSyncMappingObject*)mObject;
+{
+    BOOL isEqual;
+    if ([jsonValue isKindOfClass:[NSString class]]) {
+        isEqual = [jsonValue isEqualToString:mObject.uniqueJsonAttribute] == NSOrderedSame;
+    }
+    if ([jsonValue isKindOfClass:[NSNumber class]]) {
+        isEqual = [jsonValue isEqualToNumber:[NSNumber numberWithInt:[mObject.uniqueJsonAttribute intValue]]] == NSOrderedSame;
+    }
+    return isEqual;
+}
+
+- (void)updateOrInsertObject:(AWSyncMappingObject *)mObject forRecordsInArray:(NSArray*)records
+{
+
+    // Get the names to parse in sorted order.
+    // create array from updateKeyJsonProperty value
+    NSArray *filteredJsonPropertyValues = [records valueForKey:mObject.uniqueJsonAttribute];
+    NSArray *jsonPropertyValues = [filteredJsonPropertyValues sortedArrayUsingSelector:@selector(compare:)];
+
+    NSArray *matchingEntities = [self getMatchingRecordsForObject:mObject andJsonRecords:records];
+    
+    //todo: is it possible to skip creating array of json values and use the object instead?
     
     // Iterate over both arrays to find inserts and updates
+    BOOL isUpdate = YES;
+    NSManagedObject *existingEntity;
     NSEnumerator *otherEnum = [matchingEntities objectEnumerator];
-    for (id value in sortedFilteredJsonPropertyValues) {
-        NSManagedObject *existingEntity = [otherEnum nextObject];
-        id updateKeyPropertyValue;
-        if ([updateKeyPropertyName isEqualToString:@"objectId"]) {
-            NSURL *objectIdUrl = [existingEntity.objectID URIRepresentation];
-            updateKeyPropertyValue = [objectIdUrl absoluteString];
-        }else
-            updateKeyPropertyValue = [existingEntity valueForKey:updateKeyPropertyName];
+    for (id jsonValue in jsonPropertyValues) {
+        // go only to the next object when there was an update / was there an insert before deal with same object again
+        if (isUpdate) {
+            existingEntity = [otherEnum nextObject];
+        }
         
-        // get record dictionary in records for value
-        NSPredicate *p = [NSPredicate predicateWithFormat:@"self.%@ = %@", updateKeyJsonPropertyName, value];
+        id updateKeyPropertyValue = [self getPropertyValueForUniqueProperty:mObject.uniquePropertyName ofObject:existingEntity];
+        
+        // get json object by the json unique value
+        NSPredicate *p = [NSPredicate predicateWithFormat:@"self.%@ = %@", mObject.uniqueJsonAttribute, jsonValue];
         NSArray *matchedDicts = [records filteredArrayUsingPredicate:p];
-        NSDictionary *jsonRecord = [matchedDicts objectAtIndex:0];
+        NSDictionary *jsonRecord = [matchedDicts objectAtIndex:0]; // dictionary of one json object
         
-        BOOL areSame;
-        if ([value isKindOfClass:[NSString class]]) {
-            areSame = [value isEqualToString:updateKeyJsonPropertyName] == NSOrderedSame;
-        }
-        if ([value isKindOfClass:[NSNumber class]]) {
-            areSame = [value isEqualToNumber:[NSNumber numberWithInt:[updateKeyJsonPropertyName intValue]]] == NSOrderedSame;
-        }
+#warning potential BUG!
+        // should check if existing value and json value are same
         
-        if (areSame) {
+        isUpdate = [self jsonValue:jsonValue isEqualTo:mObject];
+        
+        if (isUpdate) {
             //We have found a pair of same objects. - update
-            // update objects with relation
-            if (mObject.relatedJSONAttributeName.length != 0) {
-                if (mObject.updateObject) {
-                    // update parent object = yes  do update partent object todo: add parent update logic
-                }
-                // Updating related object
-                if (mObject.relatedMappingObject.updateObject) {
-                    
-                    NSSet *existingRelatedObjects = [existingEntity valueForKey:mObject.relatedJSONAttributeName];
-                    objc_property_t prop = class_getProperty(mObject.relatedMappingObject.className, "delete");
-                    if (prop != NULL) {
-                        [existingRelatedObjects setValue:@YES forKey:@"delete"];
-                    }
-                    
-                    NSMutableSet *set = [NSMutableSet new];
-                    
-                    [[jsonRecord objectForKey:mObject.relatedMappingObject.jsonRootAttribute] enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
-                    
-                        NSString *uniqueValue = [obj valueForKey:mObject.relatedMappingObject.uniqueAttributeJsonName];
-                        NSPredicate *predicate = [NSPredicate predicateWithFormat:@"self.%@ ==[c] %@",mObject.relatedMappingObject.uniquePropertyName, uniqueValue];
-                            
-                        NSSet *filteredSet = [existingRelatedObjects filteredSetUsingPredicate:predicate];
-                        // Object does not exist
-                        if ([filteredSet count] == 0) {
-                            NSManagedObject *relatedObject = [self createManagedObjectForObject:mObject.relatedMappingObject forRecord:obj];
-                            [self removeDeleteFlagOnObject:relatedObject];
-                            [set addObject:relatedObject];
-                        }else { // object does exist -> update values
-                            NSManagedObject* existingObject = [[filteredSet allObjects]objectAtIndex:0];
-                            [self setAttributes:mObject.relatedMappingObject.attributeMappingDictionary fromRecords:obj forObject:existingObject];
-                            [self removeDeleteFlagOnObject:existingObject];
-                            [set addObject:existingObject];
-                            
-                        }
-
-                    }];
-                    if ([set count] != 0)
-                        [existingEntity setValue:set forKey:mObject.relatedJSONAttributeName];
-                    // ??? is this even nessaserly? setting the set of related object on the main object removes existing ones
-                    [self deleteFlagedRecordsForObject:mObject.relatedMappingObject inContext:_backgroundManagedObjectContext];
-                }
-                
-            }else {
-                // update objects without relation
+            // update objects without relation
+            if ([mObject.relatedJSONAttributeName length] == 0) {
                 [self setAttributes:mObject.attributeMappingDictionary fromRecords:jsonRecord forObject:existingEntity];
                 [self setAttributes:mObject.resetValuesOnUpdate forObject:existingEntity];
                 [self removeDeleteFlagOnObject:existingEntity];
             }
+            // update objects with relation
+            else {
+                if (mObject.updateObject) {
+#warning missing logic
+                    // TODO: update parent object = yes  do update partent object todo: add parent update logic (like above?)
+                }
+                // Updating related object
+                else if (mObject.relatedMappingObjects != nil){
+#warning potential BUG! looping through related objects does not work as realtedjsonattribute is missing
+                    for (AWSyncMappingObject *relatedMappingObject in mObject.relatedMappingObjects) {
+                        
+                        if(relatedMappingObject.updateObject){
+                            // get a set of all existinc related objects
+                            NSSet *existingRelatedObjects = [existingEntity valueForKey:mObject.relatedJSONAttributeName];
+                            // set delete flag for all related objects
+                            [self setDeleteFlagForSet:existingRelatedObjects forObjectClass:relatedMappingObject.className];
+                            
+                            NSMutableSet *set = [NSMutableSet new];
+                            
+                            // loop over json objects which are nested in the base object itmes:[{obj},{obj},...],
+                            [[jsonRecord objectForKey:relatedMappingObject.jsonRootAttribute] enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+                            
+                                // getting matching object in existing object set
+                                NSString *uniqueJsonValue = [obj valueForKey:relatedMappingObject.uniqueJsonAttribute];
+                                NSPredicate *predicate = [NSPredicate predicateWithFormat:@"self.%@ ==[c] %@",relatedMappingObject.uniquePropertyName, uniqueJsonValue];
+                                // set of max one object
+                                NSSet *filteredSet = [existingRelatedObjects filteredSetUsingPredicate:predicate];
+                                
+                                // Object does not exist
+                                if ([filteredSet count] == 0) {
+                                    NSManagedObject *relatedObject = [self createManagedObjectForObject:relatedMappingObject forRecord:obj];
+                                    [self removeDeleteFlagOnObject:relatedObject];
+                                    [set addObject:relatedObject];
+                                }else { // object does exist -> update values
+                                    // we expecting only one result back
+                                    NSManagedObject* existingRelatedObject = [[filteredSet allObjects]objectAtIndex:0];
+                                    [self setAttributes:relatedMappingObject.attributeMappingDictionary fromRecords:obj forObject:existingRelatedObject];
+                                    [self removeDeleteFlagOnObject:existingRelatedObject];
+                                    [set addObject:existingRelatedObject];
+                                    
+                                }
+                            }];
+                            if ([set count] != 0)
+                                [existingEntity setValue:set forKey:mObject.relatedJSONAttributeName];
+                            [self deleteFlagedRecordsForObject:relatedMappingObject inContext:_backgroundManagedObjectContext];
+                        }
+                    }
+                }
+                
+            }
         }else
-            [self newManagedObjectForObject:mObject forRecord:jsonRecord];
+            [self createManagedObjectForObject:mObject forRecord:jsonRecord];
 
     }
 //    }
+}
+
+- (void)updateObject:(NSManagedObjectContext*)existingEntity
+{
+
+}
+
+- (void)setDeleteFlagForSet:(NSSet*)objectSet forObjectClass:(Class)class
+{
+    objc_property_t prop = class_getProperty(class, "delete");
+    if (prop != NULL) {
+        [objectSet setValue:@YES forKey:@"delete"];
+    }
+}
+
+#pragma markg - helper
+
+- (void)saveManagedObjectContext:(NSManagedObjectContext*)context
+{
+    [context performBlockAndWait:^{
+        NSError *error = nil;
+        if (![context save:&error]) {
+            NSLog(@"Unable to save context");
+        }
+    }];
 }
 
 - (NSArray *) sortManagedObjectArrayByObjectID:(NSArray *) array {

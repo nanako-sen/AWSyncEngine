@@ -11,19 +11,19 @@
 @implementation AWSyncMappingObject
 @synthesize className = _className;
 @synthesize attributeMappingDictionary = _attributeMappingDictionary;
-@synthesize relatedObjects = _relatedObjects;
+@synthesize relatedMappingObjects = _relatedMappingObjects;
 @synthesize apiQuery = _apiQuery;
 @synthesize jsonRootAttribute = _jsonRootAttribute;
 @synthesize uniquePropertyName = _uniquePropertyName;
 
 @synthesize updateObject = _updateObject;
-@synthesize uniquePropertyJSONAttributeMappingDict = _uniquePropertyJSONAttributeMappingDict;
-@synthesize relatedMappingObject = _relatedMappingObject;
-@synthesize updatePredicateFormat = _updatePredicateFormat;
-@synthesize updatePredicateJsonAttribute = _updatePredicateJsonAttribute;
+//@synthesize uniquePropertyJSONAttributeMappingDict = _uniquePropertyJSONAttributeMappingDict;
+//@synthesize relatedMappingObject = _relatedMappingObject;
+//@synthesize updatePredicateFormat = _updatePredicateFormat;
+//@synthesize updatePredicateJsonAttribute = _updatePredicateJsonAttribute;
 @synthesize resetValuesOnUpdate = _resetValuesOnUpdate;
 @synthesize relatedJSONAttributeName = _relatedAttributeName;
-@synthesize uniqueAttributeJsonName = _uniqueAttributeJsonName;
+@synthesize uniqueJsonAttribute = _uniqueJsonAttribute;
 
 //TODO: refactor/ cleanup / improve
 
@@ -101,6 +101,17 @@
     
 }
 
+// ---------
+- (void)setUpdateObjectAtUniqueProperty:(NSString*)uniquePropertyName mappedToJsonAttribute:(NSString*)jsonAttribute
+{
+    self.updateObject = YES;
+    self.uniquePropertyName = uniquePropertyName;
+    self.uniqueJsonAttribute = jsonAttribute;
+}
+
+
+// -----------
+
 
 
 - (AWSyncMappingObject*)initForClass:(Class)mClassName fromResource:(NSString*)mResource atKey:(NSString*)key attributeMapping:(NSDictionary*)mMapping relatedObjects:(NSSet*)mRelatedObjects forProperty:(NSString *)prop uniqueIdName:(NSString*)uid needsDeletion:(BOOL)del
@@ -108,7 +119,7 @@
     if (self = [super init]) {
         self.className = mClassName;
         self.attributeMappingDictionary = mMapping;
-        self.relatedObjects = mRelatedObjects;
+        self.relatedMappingObjects = mRelatedObjects;
         self.relatedObjectsFroProperty = prop;
         self.apiQuery = mResource;
         self.jsonRootAttribute = key;
@@ -122,7 +133,7 @@
     if (self = [super init]) {
         self.className = mClassName;
         self.attributeMappingDictionary = mMapping;
-        self.relatedObjects = mRelatedObjects;
+        self.relatedMappingObjects = mRelatedObjects;
         self.relatedObjectsFroProperty = prop;
         self.apiQuery = mResource;
         self.jsonRootAttribute = key;

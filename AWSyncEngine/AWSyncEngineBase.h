@@ -35,8 +35,10 @@ typedef enum {
 - (NSString *)dateStringForAPIUsingDate:(NSDate *)date;
 - (void)clearRegister;
 
+- (void)setInitialSyncCompleted;
+
 - (void)executeConnectionOperationWithRequestType:(AWRequestType)type completionBlock:(void(^)(void))completionBlock;
-- (void)newManagedObjectForObject:(AWSyncMappingObject *)mObject forRecord:(NSDictionary *)record;
+//- (void)newManagedObjectForObject:(AWSyncMappingObject *)mObject forRecord:(NSDictionary *)record;
 //- (void)updateObject:(AWSyncMappingObject*)mObject forRecord:(NSDictionary*)record;
 - (void)updateOrInsertObject:(AWSyncMappingObject *)mObject forRecordsInArray:(NSArray*)records;
 

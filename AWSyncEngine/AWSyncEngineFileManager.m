@@ -76,43 +76,7 @@
         // remove NSNulls and try again - NSNull objects can get serilized to disc as you can't save nothing
         NSDictionary *records = [response objectForKey:jsonKey];
         NSArray *nullFreeRecords = [self removeNSNullFromJSONRecord:records];
-        //        for (NSDictionary *record in records) {
-        //            NSMutableDictionary *nullFreeRecord = [NSMutableDictionary dictionaryWithDictionary:record];
-        //            for (NSString*key in record) {
-        //                id obj = [nullFreeRecord objectForKey:key];
-        //                if ([obj isKindOfClass:[NSNull class]]) {
-        //                    [nullFreeRecord setValue:nil forKey:key];
-        //                }
-        //                //if obj is nsarray
-        //
-        //
-        //            }
-        //            [nullFreeRecords addObject:nullFreeRecord];
-        //
-        //
-        ////            [record enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
-        ////                if ([obj isKindOfClass:[NSArray class]]) {
-        ////
-        ////                    NSMutableArray *nullFreeSubRecords = [NSMutableArray array];
-        ////                    for (NSDictionary *subRecord in obj) {
-        ////                        //NSLog(@"nested dict for key: %@",key);
-        ////                        NSMutableDictionary *nullFreeSubRecord = [NSMutableDictionary dictionaryWithDictionary:subRecord];
-        ////                        [subRecord enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
-        ////                            if ([obj isKindOfClass:[NSNull class]]) {
-        ////                                [nullFreeSubRecord setValue:nil forKey:key];
-        ////                            }
-        ////                        }];
-        ////                        [nullFreeSubRecords addObject:nullFreeSubRecord];
-        ////                    }
-        ////                    [nullFreeRecord setValue:nullFreeSubRecords forKey:key];
-        ////                }
-        ////                if ([obj isKindOfClass:[NSNull class]]) {
-        ////                    [nullFreeRecord setValue:nil forKey:key];
-        ////                }
-        ////            }];
-        ////            [nullFreeRecords addObject:nullFreeRecord];
-        //        }
-        
+                
         NSDictionary *nullFreeDictionary = [NSDictionary dictionaryWithObject:nullFreeRecords forKey:jsonKey];
         
         if (![nullFreeDictionary writeToFile:[fileURL path] atomically:YES]) {

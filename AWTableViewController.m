@@ -93,7 +93,7 @@
     }
     
     NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
-    NSEntityDescription *entity = [NSEntityDescription entityForName:NSStringFromClass([CCCAddress class])
+    NSEntityDescription *entity = [NSEntityDescription entityForName:@""
                                               inManagedObjectContext:self.managedObjectContext];
     [fetchRequest setEntity:entity];
     

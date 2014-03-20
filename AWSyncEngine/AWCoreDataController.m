@@ -23,15 +23,15 @@
 @synthesize managedObjectModel = _managedObjectModel;
 @synthesize persistentStoreCoordinator = _persistentStoreCoordinator;
 
-+ (id)sharedInstance {
-    static dispatch_once_t once;
-    static AWCoreDataController *sharedInstance;
-    dispatch_once(&once, ^{
-        sharedInstance = [[self alloc] init];
-    });
-    
-    return sharedInstance;
-}
+//+ (id)sharedInstance {
+//    static dispatch_once_t once;
+//    static AWCoreDataController *sharedInstance;
+//    dispatch_once(&once, ^{
+//        sharedInstance = [[self alloc] init];
+//    });
+//    
+//    return sharedInstance;
+//}
 
 
 #pragma mark - Core Data stack

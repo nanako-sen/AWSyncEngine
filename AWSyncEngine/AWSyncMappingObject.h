@@ -18,7 +18,7 @@
 /*  NSSet of RRDUMapping ojbects*/
 // relation
 @property (nonatomic, strong) NSString *relatedObjectsFroProperty;
-@property (nonatomic, strong) NSSet *relatedObjects;
+@property (nonatomic, strong) NSSet *relatedMappingObjects;
 
 
 //@property (nonatomic, assign) BOOL needsDeletion;
@@ -28,15 +28,15 @@
 
 //update
 @property (nonatomic, assign) BOOL updateObject;
-@property (nonatomic, strong) NSDictionary *uniquePropertyJSONAttributeMappingDict;
+//@property (nonatomic, strong) NSDictionary *uniquePropertyJSONAttributeMappingDict;
 @property (nonatomic, strong) NSString *uniquePropertyName;
-@property (nonatomic, strong) NSString *uniqueAttributeJsonName;
-@property (nonatomic, strong) NSString *updatePredicateFormat;
-@property (nonatomic, strong) NSString *updatePredicateJsonAttribute;
+@property (nonatomic, strong) NSString *uniqueJsonAttribute;
+//@property (nonatomic, strong) NSString *updatePredicateFormat;
+//@property (nonatomic, strong) NSString *updatePredicateJsonAttribute;
 @property (nonatomic, strong) NSDictionary *resetValuesOnUpdate;
 
 //relation
-@property (nonatomic, strong) AWSyncMappingObject *relatedMappingObject;
+//@property (nonatomic, strong) AWSyncMappingObject *relatedMappingObject;
 @property (nonatomic, strong) NSString *relatedJSONAttributeName;
 
 /**
