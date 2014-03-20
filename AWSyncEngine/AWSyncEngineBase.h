@@ -21,7 +21,7 @@
 typedef enum {
     kGET,
     kPOST
-} AWRequestType;
+} AWRequestMethod;
 
 @interface AWSyncEngineBase : NSObject
 
@@ -37,7 +37,7 @@ typedef enum {
 
 - (void)setInitialSyncCompleted;
 
-- (void)executeConnectionOperationWithRequestType:(AWRequestType)type completionBlock:(void(^)(void))completionBlock;
+- (void)executeConnectionOperationWithRequestType:(AWRequestMethod)type completionBlock:(void(^)(void))completionBlock;
 //- (void)newManagedObjectForObject:(AWSyncMappingObject *)mObject forRecord:(NSDictionary *)record;
 //- (void)updateObject:(AWSyncMappingObject*)mObject forRecord:(NSDictionary*)record;
 - (void)updateOrInsertObject:(AWSyncMappingObject *)mObject forRecordsInArray:(NSArray*)records;

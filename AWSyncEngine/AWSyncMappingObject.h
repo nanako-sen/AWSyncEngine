@@ -11,56 +11,33 @@
 
 @interface AWSyncMappingObject : NSObject
 
-@property (nonatomic, assign) Class className;
-@property (nonatomic, strong) NSString *apiQuery;
+@property (nonatomic, assign) Class moClass;
+@property (nonatomic, strong) NSString *requestAPIResource;
 @property (nonatomic, strong) NSString *jsonRootAttribute;
-@property (nonatomic, strong) NSDictionary *attributeMappingDictionary;
+@property (nonatomic, strong) NSDictionary *attributesMappingDictionary;
 /*  NSSet of RRDUMapping ojbects*/
 // relation
-@property (nonatomic, strong) NSString *relatedObjectsFroProperty;
+@property (nonatomic, strong) NSString *relationshipNameOnParent;
 @property (nonatomic, strong) NSSet *relatedMappingObjects;
-
-
-//@property (nonatomic, assign) BOOL needsDeletion;
 
 //post
 @property (nonatomic, strong) NSDictionary *postDataDictionary;
 
 //update
-@property (nonatomic, assign) BOOL updateObject;
-//@property (nonatomic, strong) NSDictionary *uniquePropertyJSONAttributeMappingDict;
+@property (nonatomic, assign) BOOL doUpdateObject;
 @property (nonatomic, strong) NSString *uniquePropertyName;
-@property (nonatomic, strong) NSString *uniqueJsonAttribute;
-//@property (nonatomic, strong) NSString *updatePredicateFormat;
-//@property (nonatomic, strong) NSString *updatePredicateJsonAttribute;
-@property (nonatomic, strong) NSDictionary *resetValuesOnUpdate;
+@property (nonatomic, strong) NSString *uniqueJsonAttributeName;
+@property (nonatomic, strong) NSDictionary *setKeysToValuesOnUpdate;
 
 //relation
-//@property (nonatomic, strong) AWSyncMappingObject *relatedMappingObject;
-@property (nonatomic, strong) NSString *relatedJSONAttributeName;
+@property (nonatomic, strong) NSString *relatedJsonRootAttributeName;
 
 /**
  * GET REQUEST
  * uniqueIdName only needed if needs deletion NO (-> only records which are not in the store are getting inserted - no update fo existing records)
  */
-+ (AWSyncMappingObject*)simpleMappingForClass:(Class)mClassName fromResource:(NSString*)mResource;
-
-+ (AWSyncMappingObject*)mappSingleRelationForClass:(Class)mClassName
-                                              atKey:(NSString*)key
-                                   attributeMapping:(NSDictionary*)mMapping
-                                        forProperty:(NSString *)prop;
 
 
-+ (AWSyncMappingObject*)mappingForClass:(Class)mClassName
-                  fromResource:(NSString*)mResource
-                         atKey:(NSString*)key
-              attributeMapping:(NSDictionary*)mMapping
-                relatedObjects:(NSSet*)mRelatedObjects
-                   forProperty:(NSString*)prop
-                  uniqueIdName:(NSString*)uid
-                 needsDeletion:(BOOL)del;
-
-//+ (RDUSyncMappingObject*)mappingToExistingObjectForClass:(Class)mClassName fromURL:(NSString *)urlString atJsonRootKey:(NSString *)key attributeMapping:(NSDictionary *)mMapping relatedToExistingObject:(Class)existingObject objectIdProperty:(NSString*)objectIdProp;
 
 /**
  *  POST
@@ -70,18 +47,8 @@
 //+ (RDUSyncMappingObject*)mappingForPostForClass:(Class)mClassName fromResource:(NSString*)mResource atKey:(NSString*)key attributeMapping:(NSDictionary*)mMapping relatedObjects:(NSSet*)mRelatedObjects forProperty:(NSString *)prop uniqueIdName:(NSString*)uid needsDeletion:(BOOL)del postParams:(NSDictionary*)params;
 
 
-- (AWSyncMappingObject*)initForClass:(Class)mClassName
-               fromResource:(NSString*)mResource
-                      atKey:(NSString*)key
-           attributeMapping:(NSDictionary*)mMapping
-             relatedObjects:(NSSet*)mRelatedObjects
-                forProperty:(NSString*)prop
-               uniqueIdName:(NSString*)uid
-              needsDeletion:(BOOL)del;
 
-- (AWSyncMappingObject*)initForPostForClass:(Class)mClassName fromResource:(NSString*)mResource atKey:(NSString*)key attributeMapping:(NSDictionary*)mMapping relatedObjects:(NSSet*)mRelatedObjects forProperty:(NSString *)prop uniqueIdName:(NSString*)uid needsDeletion:(BOOL)del postParams:(NSDictionary*)params;
-
-- (NSString*)stringClassName;
+- (NSString*)className;
 @end
 
 @interface NSMutableArray (findObjects)
