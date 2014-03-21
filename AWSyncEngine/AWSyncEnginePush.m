@@ -8,15 +8,16 @@
 
 #import "AWSyncEnginePush.h"
 
-
-NSString * const kSDSyncEngineInitialCompleteKeyPush = @"SDSyncEngineInitialSyncPushCompleted";
 NSString * const kSDSyncEngineSyncStartedNotificationNamePush = @"SDSyncEngineSyncPushStarted";
 NSString * const kSDSyncEngineSyncCompletedNotificationNamePush = @"SDSyncEngineSyncPushCompleted";
+NSString * const kSyncInProgressProperty = @"syncPushInProgress";
 
 @interface AWSyncEnginePush (){
     NSArray * _result;
     NSManagedObjectContext *_managedObjectContext;
 }
+@property (nonatomic, strong) NSString *syncInProgressProperty;
+
 @property (atomic, assign) BOOL syncInProgress;
 @end
 
@@ -40,76 +41,47 @@ NSString * const kSDSyncEngineSyncCompletedNotificationNamePush = @"SDSyncEngine
 {
     if (self = [super init]) {
         self.syncInProgress = NO;
+        self.requestMethod = kPOST;
+        self.syncInProgressProperty = kSyncInProgressProperty;
     }
     return self;
 }
 
 - (void)startSync
 {
-    if ([self.registeredClassesToSync count]!= 0) {
-        if (!self.syncInProgress) {
-            [[NSNotificationCenter defaultCenter]
-             postNotificationName:kSDSyncEngineSyncStartedNotificationNamePush
-             object:nil];
-            [self willChangeValueForKey:@"syncPushInProgress"];
-            self.syncInProgress = YES;
-            [self didChangeValueForKey:@"syncPushInProgress"];
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-                [self postAndSyncObjects];
-            });
-        }
+    NSError *error = nil;
+    if ([self initalizeSyncError:&error]) {
+        [[NSNotificationCenter defaultCenter]
+         postNotificationName:kSDSyncEngineSyncStartedNotificationNamePush
+         object:nil];
+
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+            [self postAndSyncObjects];
+        });
+    } else {
+        NSLog(@"Error initializing sync push: %@",error);
     }
 }
 
 - (void)executeSyncCompletedOperations {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self setInitialSyncCompleted];
-        NSError *error = nil;
-        [self.coreDataController saveBackgroundContext];
-        if (error) {
-            NSLog(@"Error saving background context after creating objects on server: %@", error);
-        }
-        
-        [self.coreDataController saveMasterContext];
+        [self saveContexts];
         [[NSNotificationCenter defaultCenter]
          postNotificationName:kSDSyncEngineSyncCompletedNotificationNamePush
          object:nil];
-        [self willChangeValueForKey:@"syncPushInProgress"];
-        self.syncInProgress = NO;
-        [self didChangeValueForKey:@"syncPushInProgress"];
-        [self recordLastSyncDate];
+        [self resetSyncInProgress];
+        [self setLastSyncDateForKey:@"lastSyncedPush"];
     });
 }
 
-- (void)recordLastSyncDate
+- (NSDate*)lastSyncedDate
 {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setObject:[NSDate date] forKey:@"lastSyncPush"];
-    [defaults synchronize];
-}
-
-- (NSDate*)lastSyncPushDate
-{
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    return [defaults objectForKey:@"lastSyncPush"];
-}
-
-#warning hardcoded return value (leave it - working)
-- (BOOL)initialSyncComplete
-{
-    return NO;
-    //return [[[NSUserDefaults standardUserDefaults] valueForKey:kSDSyncEngineInitialCompleteKey] boolValue];
-}
-
-- (void)setInitialSyncCompleted
-{
-    [[NSUserDefaults standardUserDefaults] setValue:[NSNumber numberWithBool:YES] forKey:kSDSyncEngineInitialCompleteKeyPush];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    return [self lastSyncPushDateForKey:@"lastSyncedPush"];
 }
 
 - (void)postAndSyncObjects
 {
-    [self executeConnectionOperationWithRequestType:kPOST completionBlock:^{
+    [self executeConnectionOperationWithCompletionBlock:^{
         [self executeSyncCompletedOperations];
     }];
     

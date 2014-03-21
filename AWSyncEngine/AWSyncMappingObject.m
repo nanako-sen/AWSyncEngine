@@ -16,7 +16,7 @@
 @synthesize jsonRootAttribute = _jsonRootAttribute;
 @synthesize uniquePropertyName = _uniquePropertyName;
 
-@synthesize doUpdateObject = _doUpdateObject;
+@synthesize doUpdate = _doUpdate;
 @synthesize setKeysToValuesOnUpdate = _setKeysToValuesOnUpdate;
 @synthesize relatedJsonRootAttributeName = _relatedAttributeName;
 @synthesize uniqueJsonAttributeName = _uniqueJsonAttributeName;
@@ -99,7 +99,7 @@
 // ---------
 - (void)setUpdateObjectAtUniqueProperty:(NSString*)uniquePropertyName mappedToJsonAttribute:(NSString*)jsonAttribute
 {
-    self.doUpdateObject = YES;
+    self.doUpdate = YES;
     self.uniquePropertyName = uniquePropertyName;
     self.uniqueJsonAttributeName = jsonAttribute;
 }

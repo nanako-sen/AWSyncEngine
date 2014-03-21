@@ -28,7 +28,17 @@ typedef enum {
 @property (nonatomic, readonly) NSMutableArray *registeredClassesToSync;
 @property (nonatomic, strong) AWSyncEngineFileManager *syncFileManager;
 @property (nonatomic, strong) NSURL *baseUrl;
+@property (nonatomic, assign) AWRequestMethod requestMethod;
 @property (nonatomic, strong) AWCoreDataController *coreDataController;
+@property (nonatomic, assign) BOOL syncInProgress;
+@property (nonatomic, readonly) NSString *syncInProgressProperty;
+
+- (BOOL)initalizeSyncError:(NSError * __autoreleasing *)error;
+- (void)resetSyncInProgress;
+- (void)setLastSyncDateForKey:(NSString*)key;
+- (NSDate*)lastSyncPushDateForKey:(NSString*)key;
+- (void)saveContexts;
+
 
 
 - (void)registerNSManagedObjectToSync:(AWSyncMappingObject*)mObject;
@@ -37,7 +47,7 @@ typedef enum {
 
 - (void)setInitialSyncCompleted;
 
-- (void)executeConnectionOperationWithRequestType:(AWRequestMethod)type completionBlock:(void(^)(void))completionBlock;
+- (void)executeConnectionOperationWithCompletionBlock:(void(^)(void))completionBlock;
 //- (void)newManagedObjectForObject:(AWSyncMappingObject *)mObject forRecord:(NSDictionary *)record;
 //- (void)updateObject:(AWSyncMappingObject*)mObject forRecord:(NSDictionary*)record;
 - (void)updateOrInsertObject:(AWSyncMappingObject *)mObject forRecordsInArray:(NSArray*)records;
@@ -53,6 +63,17 @@ typedef enum {
 
 
 //- (void)deleteAllRecordsForEnity:(NSString*)entity;
-- (void)setDeleteFlagForObject:(AWSyncMappingObject*)object inContext:(NSManagedObjectContext*)context;
-- (void)deleteFlagedRecordsForObject:(AWSyncMappingObject*)object inContext:(NSManagedObjectContext*)context;
+- (void)setDeleteFlagForClass:(Class)mClass inContext:(NSManagedObjectContext*)context;
+- (void)deleteFlagedRecordsForClass:(Class)mClass inContext:(NSManagedObjectContext*)context;
+@end
+
+@interface AWErrorHandling : NSObject
+
+typedef enum {
+    AWErrorMissingBaseUrl = 60,
+    AWErrorNoRegisteredClasses = 61,
+    AWErrorSyncInProgress = 62
+} AWErrorCodes;
+
++ (NSError*)errorWithCode:(AWErrorCodes)code;
 @end

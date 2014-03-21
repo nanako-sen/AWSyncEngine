@@ -10,6 +10,7 @@
 
 NSString * const kSDSyncEngineInitialCompleteKey = @"SDSyncEngineInitialSyncCompleted";
 NSString * const kSDSyncEngineSyncCompletedNotificationName = @"SDSyncEngineSyncCompleted";
+NSString * const kSyncInProgressProperty = @"syncInProgress";
 
 #define kSyncInterval 3600*24*1
 
@@ -18,13 +19,14 @@ NSString * const kSDSyncEngineSyncCompletedNotificationName = @"SDSyncEngineSync
 }
 
 @property (atomic, assign) BOOL syncInProgress;
+@property (nonatomic, strong) NSString *syncInProgressProperty;
 
 @end
 
 
 @implementation AWSyncEngine
 
-@synthesize syncInProgress = _syncInProgress , syncInterval = _syncInterval;
+@synthesize  syncInterval = _syncInterval;
 
 + (AWSyncEngine*)sharedEngine
 {
@@ -42,6 +44,8 @@ NSString * const kSDSyncEngineSyncCompletedNotificationName = @"SDSyncEngineSync
         self.syncInProgress = NO;
         self.syncInterval = kSyncInterval;
         self.coreDataController = [AWCoreDataController new];
+        self.requestMethod = kGET;
+        self.syncInProgressProperty = kSyncInProgressProperty;
     }
     return self;
 }
@@ -49,48 +53,30 @@ NSString * const kSDSyncEngineSyncCompletedNotificationName = @"SDSyncEngineSync
 - (void)startSync
 {
     /* reachability check doesn't work like expected, it gets handled in app delegate */
-    if (self.baseUrl == nil) {
-        NSLog(@"baseUrl musn't be nil");
-    }
-    if (!self.syncInProgress) {
-        [self willChangeValueForKey:@"syncInProgress"];
-        self.syncInProgress = YES;
-        [self didChangeValueForKey:@"syncInProgress"];
+    NSError *error = nil;
+    if ([self initalizeSyncError:&error]) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
             [self syncObjects];
         });
+    } else {
+        NSLog(@"Error initializing sync: %@",error);
     }
-
 }
 
 
 - (void)executeSyncCompletedOperations {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self setInitialSyncCompleted];
-        NSError *error = nil;
-        [self.coreDataController saveBackgroundContext];
-        if (error) {
-            NSLog(@"Error saving background context after creating objects on server: %@", error);
-        }
-        
-        [self.coreDataController saveMasterContext];
+        [self saveContexts];
         [[NSNotificationCenter defaultCenter]
          postNotificationName:kSDSyncEngineSyncCompletedNotificationName
          object:nil];
-        [self changeSyncInProgressValueToNO];
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        [defaults setObject:[NSDate date] forKey:@"lastSynced"];
-        [defaults synchronize];
-//        [RDUUserDefaults setLastSynced:[NSDate date]];
+        [self resetSyncInProgress];
+        [self setLastSyncDateForKey:@"lastSynced"];
     });
 }
 
-- (void)changeSyncInProgressValueToNO
-{
-    [self willChangeValueForKey:@"syncInProgress"];
-    _syncInProgress = NO;
-    [self didChangeValueForKey:@"syncInProgress"];
-}
+
 
 
 - (BOOL)needsSyncing
@@ -111,17 +97,17 @@ NSString * const kSDSyncEngineSyncCompletedNotificationName = @"SDSyncEngineSync
     return true;
 }
 
-- (NSDate*)lastSynced
+
+- (NSDate*)lastSyncedDate
 {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    return [defaults valueForKey:@"lastSynced"];
+    return [self lastSyncPushDateForKey:@"lastSynced"];
 }
 
 #warning hardcoded return value (leave it till if find out if needed - its working like it is)
 
 - (void)syncObjects
 {
-    [self executeConnectionOperationWithRequestType:kGET completionBlock:^{
+    [self executeConnectionOperationWithCompletionBlock:^{
         [self executeSyncCompletedOperations];
     }];
 }

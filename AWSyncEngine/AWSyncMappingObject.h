@@ -24,7 +24,7 @@
 @property (nonatomic, strong) NSDictionary *postDataDictionary;
 
 //update
-@property (nonatomic, assign) BOOL doUpdateObject;
+@property (nonatomic, assign) BOOL doUpdate;
 @property (nonatomic, strong) NSString *uniquePropertyName;
 @property (nonatomic, strong) NSString *uniqueJsonAttributeName;
 @property (nonatomic, strong) NSDictionary *setKeysToValuesOnUpdate;
