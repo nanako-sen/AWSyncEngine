@@ -24,16 +24,24 @@ typedef enum {
 } AWRequestMethod;
 
 @interface AWSyncEngineBase : NSObject
+{
+    @protected
+    BOOL _syncInProgress;
+    NSString *_syncInProgressProperty;
+}
 
 @property (nonatomic, readonly) NSMutableArray *registeredClassesToSync;
 @property (nonatomic, strong) AWSyncEngineFileManager *syncFileManager;
 @property (nonatomic, strong) NSURL *baseUrl;
 @property (nonatomic, assign) AWRequestMethod requestMethod;
 @property (nonatomic, strong) AWCoreDataController *coreDataController;
-@property (nonatomic, assign) BOOL syncInProgress;
+@property (atomic, readonly) BOOL syncInProgress;
 @property (nonatomic, readonly) NSString *syncInProgressProperty;
 
 - (BOOL)initalizeSyncError:(NSError * __autoreleasing *)error;
+- (void)checkBaseURL;
+- (void)setSyncInProgress;
+
 - (void)resetSyncInProgress;
 - (void)setLastSyncDateForKey:(NSString*)key;
 - (NSDate*)lastSyncPushDateForKey:(NSString*)key;

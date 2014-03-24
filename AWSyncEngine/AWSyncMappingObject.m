@@ -8,98 +8,57 @@
 
 #import "AWSyncMappingObject.h"
 
+@interface AWSyncMappingObject ()
+
+@property (nonatomic, strong) NSString *resetProperty;
+@property (nonatomic, strong) id resetToValue;
+
+@property (nonatomic, strong) NSString *updateRuleProperty;
+@property (nonatomic, strong) NSString *updateRuleAttribute;
+@property (nonatomic, assign) NSComparisonResult updateComparisonResult;
+
+@end
+
 @implementation AWSyncMappingObject
-@synthesize moClass = _moClass;
-@synthesize attributesMappingDictionary = _attributesMappingDictionary;
+@synthesize objectClass = _objectClass;
+@synthesize attributeMapping = _attributeMapping;
 @synthesize relatedMappingObjects = _relatedMappingObjects;
 @synthesize requestAPIResource = _requestAPIResource;
 @synthesize jsonRootAttribute = _jsonRootAttribute;
 @synthesize uniquePropertyName = _uniquePropertyName;
 
 @synthesize doUpdate = _doUpdate;
-@synthesize setKeysToValuesOnUpdate = _setKeysToValuesOnUpdate;
+//@synthesize setKeysToValuesOnUpdate = _setKeysToValuesOnUpdate;
 @synthesize relatedJsonRootAttributeName = _relatedAttributeName;
 @synthesize uniqueJsonAttributeName = _uniqueJsonAttributeName;
+@synthesize resetProperty = _resetProperty;
+@synthesize resetToValue = _resetToValue;
+@synthesize updateRuleProperty = updateRuleProperty;
+@synthesize updateRuleAttribute = updateRuleAttribute;
+@synthesize updateComparisonResult = _updateComparisonResult;
 
-//TODO: refactor/ cleanup / improve
 
-
-
-// needsDeletion removed
-
-//
-+ (AWSyncMappingObject*)mappingForPost:(NSDictionary*)params fromURL:(NSString*)urlString
++ (AWSyncMappingObject*)baseMappingPOSTForClass:(Class)class fromApiResource:(NSString*)apiResource postParams:(NSDictionary*)params atKey:(NSString*)key
 {
     AWSyncMappingObject *mo = [AWSyncMappingObject new];
     mo.postDataDictionary = params;
-    mo.requestAPIResource = urlString;
-
+    mo.requestAPIResource = apiResource;
+    mo.jsonRootAttribute = key;
+    mo.objectClass = class;
     return  mo;
 }
-
-//+ (RDUSyncMappingObject*)mappingForPostForClass:(Class)mClassName fromResource:(NSString*)mResource atKey:(NSString*)key attributeMapping:(NSDictionary*)mMapping relatedObjects:(NSSet*)mRelatedObjects forProperty:(NSString *)prop uniqueIdName:(NSString*)uid needsDeletion:(BOOL)del postParams:(NSDictionary*)params
-//{
-//    RDUSyncMappingObject *mapping = [[RDUSyncMappingObject alloc] initForPostForClass:mClassName
-//                                                                  fromResource:(NSString*)mResource
-//                                                                         atKey:(NSString*)key
-//                                                              attributeMapping:mMapping
-//                                                                relatedObjects:mRelatedObjects
-//                                                                   forProperty:prop
-//                                                                  uniqueIdName:uid
-//                                                                 needsDeletion:del
-//                                                                    postParams:params];
-//    return mapping;
-//}
-
-
-//+ (AWSyncMappingObject*)simpleMappingForClass:(Class)mClassName fromResource:(NSString*)mResource
-//{
-//    AWSyncMappingObject *mapping = [[AWSyncMappingObject alloc] initForClass:mClassName
-//                                                                  fromResource:(NSString*)mResource
-//                                                                         atKey:@"data"
-//                                                              attributeMapping:nil
-//                                                                relatedObjects:nil
-//                                                                   forProperty:nil
-//                                                                  uniqueIdName:nil
-//                                                                 needsDeletion:NO];
-//    return mapping;
-//    
-//}
-//
-//
-//+ (AWSyncMappingObject*)mappSingleRelationForClass:(Class)mClassName atKey:(NSString*)key attributeMapping:(NSDictionary*)mMapping forProperty:(NSString *)prop
-//{
-//    AWSyncMappingObject *mapping = [[AWSyncMappingObject alloc] initForClass:mClassName
-//                                                                  fromResource:nil
-//                                                                         atKey:(NSString*)key
-//                                                              attributeMapping:mMapping
-//                                                                relatedObjects:nil
-//                                                                   forProperty:prop
-//                                                                  uniqueIdName:nil
-//                                                                 needsDeletion:NO];
-//    return mapping;
-//    
-//}
-//
-//
-//+ (AWSyncMappingObject*)mappingForClass:(Class)mClassName fromResource:(NSString*)mResource atKey:(NSString*)key attributeMapping:(NSDictionary*)mMapping relatedObjects:(NSSet*)mRelatedObjects forProperty:(NSString *)prop uniqueIdName:(NSString*)uid needsDeletion:(BOOL)del
-//{
-//    AWSyncMappingObject *mapping = [[AWSyncMappingObject alloc] initForClass:mClassName
-//                                                                  fromResource:(NSString*)mResource
-//                                                                         atKey:(NSString*)key
-//                                                              attributeMapping:mMapping
-//                                                                relatedObjects:mRelatedObjects
-//                                                                   forProperty:prop
-//                                                                  uniqueIdName:uid
-//                                                                 needsDeletion:del];
-//    return mapping;
-//    
-//}
 
 // ---------
 - (void)setUpdateObjectAtUniqueProperty:(NSString*)uniquePropertyName mappedToJsonAttribute:(NSString*)jsonAttribute
 {
     self.doUpdate = YES;
+    self.uniquePropertyName = uniquePropertyName;
+    self.uniqueJsonAttributeName = jsonAttribute;
+}
+
+- (void)defineUniqueProperty:(NSString*)uniquePropertyName mappedToJsonAttribute:(NSString*)jsonAttribute
+{
+    self.doUpdate = NO;
     self.uniquePropertyName = uniquePropertyName;
     self.uniqueJsonAttributeName = jsonAttribute;
 }
@@ -114,43 +73,37 @@
     self.relatedJsonRootAttributeName = jsonAttribute;
 }
 
+
+- (void)resetProperty:(NSString*)property toValue:(id)value
+{
+    self.resetToValue = value;
+    self.resetProperty = property;
+}
+
+- (void)defineUpdateRuleForProperty:(NSString*)property andJsonAttribute:(NSString*)attribute comparisonResult:(NSComparisonResult)comparisonResult;
+{
+    self.updateRuleProperty = property;
+    self.updateRuleAttribute = attribute;
+    self.updateComparisonResult = comparisonResult;
+}
+
 // -----------
 
 
-
-//- (AWSyncMappingObject*)initForClass:(Class)mClassName fromResource:(NSString*)mResource atKey:(NSString*)key attributeMapping:(NSDictionary*)mMapping relatedObjects:(NSSet*)mRelatedObjects forProperty:(NSString *)prop uniqueIdName:(NSString*)uid needsDeletion:(BOOL)del
-//{
-//    if (self = [super init]) {
-//        self.className = mClassName;
-//        self.attributeMappingDictionary = mMapping;
-//        self.relatedMappingObjects = mRelatedObjects;
-//        self.relationshipNameOnParent = prop;
-//        self.apiQuery = mResource;
-//        self.jsonRootAttribute = key;
-//        self.uniquePropertyName = uid;
-//    }
-//    return self;
-//}
-//
-//- (AWSyncMappingObject*)initForPostForClass:(Class)mClassName fromResource:(NSString*)mResource atKey:(NSString*)key attributeMapping:(NSDictionary*)mMapping relatedObjects:(NSSet*)mRelatedObjects forProperty:(NSString *)prop uniqueIdName:(NSString*)uid needsDeletion:(BOOL)del postParams:(NSDictionary*)params
-//{
-//    if (self = [super init]) {
-//        self.className = mClassName;
-//        self.attributeMappingDictionary = mMapping;
-//        self.relatedMappingObjects = mRelatedObjects;
-//        self.relationshipNameOnParent = prop;
-//        self.apiQuery = mResource;
-//        self.jsonRootAttribute = key;
-//        self.uniquePropertyName = uid;
-//        self.postDataDictionary = params;
-//    }
-//    return self;
-//}
++ (AWSyncMappingObject*)baseMappingForClass:(Class)class fromApiResource:(NSString*)apiResource attributeMapping:(NSDictionary*)mappingDict atKey:(NSString*)key
+{
+    AWSyncMappingObject *mo = [AWSyncMappingObject new];
+    mo.objectClass = class;
+    mo.requestAPIResource = apiResource;
+    mo.attributeMapping = mappingDict;
+    mo.jsonRootAttribute = key;
+    return mo;
+}
 
 
 - (NSString*)className
 {
-    return NSStringFromClass(self.moClass);
+    return NSStringFromClass(self.objectClass);
 }
 
 @end
@@ -161,7 +114,7 @@
 - (BOOL)containsObjectWithClass:(Class)c
 {
     for (AWSyncMappingObject* m in self) {
-        if (m.moClass == c ) {
+        if (m.objectClass == c ) {
             return YES;
         }
     }

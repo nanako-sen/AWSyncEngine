@@ -35,7 +35,7 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
 {
     if (self = [super init]) {
         self.syncFileManager = [AWSyncEngineFileManager new];
-        self.coreDataController = [AWCoreDataController new];
+        self.coreDataController = [AWCoreDataController sharedInstance];
         _backgroundManagedObjectContext = [self.coreDataController backgroundManagedObjectContext];
     }
     return self;
@@ -43,29 +43,38 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
 
 - (BOOL)initalizeSyncError:(NSError * __autoreleasing *)error
 {
-    BOOL success = NO;
-    if (self.baseUrl == nil) {
-        *error = [AWErrorHandling errorWithCode:AWErrorMissingBaseUrl];
+    BOOL success = YES;
+    if ([self.registeredClassesToSync count] == 0) {
+        success = NO;
+        if (error != NULL) {
+            *error = [AWErrorHandling errorWithCode:AWErrorNoRegisteredClasses];
+        }
     }
-    if ([self.registeredClassesToSync count]!= 0) {
-        if (!self.syncInProgress) {
-            [self willChangeValueForKey:self.syncInProgressProperty];
-            self.syncInProgress = YES;
-            [self didChangeValueForKey:self.syncInProgressProperty];
-            success = YES;
-        } else {
+    else if (self.syncInProgress) {
+        success = NO;
+        if (error != NULL) {
             *error = [AWErrorHandling errorWithCode:AWErrorSyncInProgress];
         }
-    } else {
-        *error = [AWErrorHandling errorWithCode:AWErrorNoRegisteredClasses];
     }
     return success;
+}
+
+- (void)checkBaseURL
+{
+    assert(self.baseUrl != nil);
+}
+
+- (void)setSyncInProgress
+{
+    [self willChangeValueForKey:self.syncInProgressProperty];
+    _syncInProgress = YES;
+    [self didChangeValueForKey:self.syncInProgressProperty];
 }
 
 - (void)resetSyncInProgress
 {
     [self willChangeValueForKey:self.syncInProgressProperty];
-    self.syncInProgress = NO;
+    _syncInProgress = NO;
     [self didChangeValueForKey:self.syncInProgressProperty];
 }
 
@@ -102,14 +111,14 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
         self.registeredClassesToSync = [NSMutableArray array];
     }
     
-    if ([mObject.moClass isSubclassOfClass:[NSManagedObject class]]) {
-        if (![self.registeredClassesToSync containsObjectWithClass:mObject.moClass]) {
+    if ([mObject.objectClass isSubclassOfClass:[NSManagedObject class]]) {
+        if (![self.registeredClassesToSync containsObjectWithClass:mObject.objectClass]) {
             [self.registeredClassesToSync addObject:mObject];
         } else {
             NSLog(@"Unable to register %@ as it is already registered", [mObject className]);
         }
     } else {
-        NSLog(@"Unable to register %@ as it is not a subclass of NSManagedObject", NSStringFromClass(mObject.moClass));
+        NSLog(@"Unable to register %@ as it is not a subclass of NSManagedObject", NSStringFromClass(mObject.objectClass));
     }
 }
 
@@ -128,7 +137,7 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
     NSManagedObject *newManagedObject = [NSEntityDescription insertNewObjectForEntityForName:[mObject className]
                                                                       inManagedObjectContext:_backgroundManagedObjectContext];
     
-    [self setAttributes:mObject.attributesMappingDictionary fromRecords:record forObject:newManagedObject];
+    [self setAttributes:mObject.attributeMapping fromRecords:record forObject:newManagedObject];
     
     [mObject.relatedMappingObjects enumerateObjectsUsingBlock:^(id obj, BOOL *stop) {
         AWSyncMappingObject *mo = (AWSyncMappingObject*)obj;
@@ -154,6 +163,17 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
 
 #pragma mark - Connection Execute
 
+- (NSMutableURLRequest*)getURLRequest:(AWSyncMappingObject*)mappingObject fromAPIClient:(AWAFParseAPIClient*)parseAPIClient
+{
+    NSMutableURLRequest *request = [NSMutableURLRequest new];
+    if (self.requestMethod == kPOST) {
+        request = [parseAPIClient POSTRequestToUrl:mappingObject.requestAPIResource parameters:mappingObject.postDataDictionary];
+    }else if (self.requestMethod == kGET){
+        request = [parseAPIClient GETRequest:mappingObject.requestAPIResource parameters:nil];
+    }
+    return request;
+}
+
 - (void)executeConnectionOperationWithCompletionBlock:(void(^)(void))completionBlock
 {
     NSMutableArray *operations = [NSMutableArray array];
@@ -162,12 +182,7 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
         NSString *className = mObject.className;
         AWAFParseAPIClient *parseAPIClient = [[AWAFParseAPIClient alloc] initWithBaseURL:self.baseUrl];
         
-        NSMutableURLRequest *request = [NSMutableURLRequest new];
-        if (self.requestMethod == kPOST) {
-            request = [parseAPIClient POSTRequestToUrl:mObject.requestAPIResource parameters:mObject.postDataDictionary];
-        }else if (self.requestMethod == kGET){
-            request = [parseAPIClient GETRequest:mObject.requestAPIResource parameters:nil];
-        }
+        NSMutableURLRequest *request = [self getURLRequest:mObject fromAPIClient:parseAPIClient];
         
         AFHTTPRequestOperation *operation = [parseAPIClient HTTPRequestOperationWithRequest:request
                                                                                     success:^(AFHTTPRequestOperation *operation, id responseObject)
@@ -188,43 +203,47 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
     NSArray *batches= [AFURLConnectionOperation batchOfRequestOperations:operations
                                                            progressBlock:^(NSUInteger numberOfCompletedOperations, NSUInteger totalNumberOfOperations)
                                                            {
-                                                               //                       NSLog(@"%lu of %lu complete", (unsigned long)numberOfCompletedOperations, (unsigned long)totalNumberOfOperations);
+//                                                               NSLog(@"%lu of %lu complete", (unsigned long)numberOfCompletedOperations, (unsigned long)totalNumberOfOperations);
                                                            }
                                                          completionBlock:^(NSArray *operations) {
                                                              NSLog(@"All operations in batch complete Push");
                                                              // Processing data into core data
                                                              for (AWSyncMappingObject* mObject in self.registeredClassesToSync) {
-                                                                 NSString *className = [mObject className];
-                                                                 NSDictionary *JSONDictionary = [self.syncFileManager JSONDictionaryForClassWithName:className];
+                                                                 NSDictionary *JSONDictionary = [self.syncFileManager JSONDictionaryForClassWithName:[mObject className]];
                                                                  NSArray *records = [JSONDictionary objectForKey:mObject.jsonRootAttribute];
                                                                  
-                                                                 if (kGET) {
-                                                                     if (![self initialSyncComplete]){
-                                                                         for (NSDictionary *record in records) {
-                                                                             [self createManagedObjectForObject:mObject forRecord:record];
-                                                                         }
-                                                                     } else {
-                                                                         [self setDeleteFlagForClass:mObject.moClass
-                                                                                            inContext:_backgroundManagedObjectContext];
-                                                                         [self updateOrInsertObject:mObject
-                                                                                  forRecordsInArray:records];
-                                                                         [self deleteFlagedRecordsForClass:mObject.moClass
-                                                                                                  inContext:_backgroundManagedObjectContext];
-                                                                     }
-                                                                 }else if (kPOST) {
-                                                                     [self updateOrInsertObject:mObject forRecordsInArray:records];
-                                                                 }
-                                                                     
-//
+                                                                 [self executeBatchCompletionOperationsForRecords:records forMappingObject:mObject];
                                                                  
                                                                  [self saveManagedObjectContext:_backgroundManagedObjectContext];
                                                                  //#warning commented logic
-                                                                 [self.syncFileManager deleteJSONDataRecordsForClassWithName:className];
+                                                                 //[self.syncFileManager deleteJSONDataRecordsForClassWithName: [mObject className]];
                                                                  
                                                              }
                                                              completionBlock();
                                                          }];
     [[NSOperationQueue mainQueue] addOperations:batches waitUntilFinished:NO];
+}
+
+- (void)executeBatchCompletionOperationsForRecords:(NSArray*)records forMappingObject:(AWSyncMappingObject*)mObject
+{
+    if (self.requestMethod == kGET) {
+        if (![self initialSyncComplete]){
+            for (NSDictionary *record in records) {
+                [self createManagedObjectForObject:mObject forRecord:record];
+            }
+        }
+        //  Update
+        else {
+            [self setDeleteFlagForClass:mObject.objectClass
+                              inContext:_backgroundManagedObjectContext];
+            [self updateOrInsertObject:mObject
+                     forRecordsInArray:records];
+            [self deleteFlagedRecordsForClass:mObject.objectClass
+                                    inContext:_backgroundManagedObjectContext];
+        }
+    }else if (self.requestMethod == kPOST) {
+        [self updateOrInsertObject:mObject forRecordsInArray:records];
+    }
 }
 
 - (BOOL)initialSyncComplete
@@ -299,7 +318,7 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
  @brief  Returns objects from data store which match objects in a array of JsonObjects
  @returns A dictionary of matching NSManagedObjects
  */
-- (NSDictionary*)getMatchingRecordsForObject:(AWSyncMappingObject*)object andJsonRecords:(NSArray*)records
+- (NSArray*)getMatchingRecordsForObject:(AWSyncMappingObject*)object andJsonRecords:(NSArray*)records
 {
     NSFetchRequest *fetchRequest = [self fetchRequestForObject:object andJsonRecords:records];
     
@@ -315,7 +334,7 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
         matchingEntities = [self sortManagedObjectArrayByObjectID:matchingEntities];
     }
 
-    return [NSDictionary dictionaryWithObjects:matchingEntities forKeys:[matchingEntities valueForKey:object.uniquePropertyName]];
+    return matchingEntities;
 }
 
 - (NSFetchRequest*)fetchRequestForObject:(AWSyncMappingObject*)mObject andJsonRecords:(NSArray*)records
@@ -355,12 +374,12 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
 
 - (BOOL)jsonValue:(id)jsonValue isEqualTo:(id)key;
 {
-    BOOL isEqual;
+    BOOL isEqual = NO;
     if ([jsonValue isKindOfClass:[NSString class]]) {
-        isEqual = [jsonValue isEqualToString:key] == NSOrderedSame;
+        isEqual = [jsonValue isEqualToString:key] ;
     }
     if ([jsonValue isKindOfClass:[NSNumber class]]) {
-        isEqual = [jsonValue isEqualToNumber:[NSNumber numberWithInt:[key intValue]]] == NSOrderedSame;
+        isEqual = [jsonValue isEqualToNumber:[NSNumber numberWithInt:[key intValue]]];
     }
     return isEqual;
 }
@@ -382,34 +401,36 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
     return filteredSet.count == 0 ? nil : [[filteredSet allObjects]objectAtIndex:0];
 }
 
-- (void)updateOrInsertRelatedObject:(AWSyncMappingObject*)relatedMappingObject forExistingObject:(NSManagedObject*)existingObject withRecord:(NSArray*)records
+- (void)updateOrInsertRelatedObjects:(NSSet*)relatedMappingObjects forExistingObject:(NSManagedObject*)existingObject withRecord:(NSDictionary*)records
 {
-    if(relatedMappingObject.doUpdate){
-        // get a set of all existinc related objects
-        NSSet *existingRelatedObjects = [existingObject valueForKey:relatedMappingObject.relatedJsonRootAttributeName];
-        // set delete flag for all related objects
-        [self setDeleteFlagForObjectsInSet:existingRelatedObjects forObjectClass:relatedMappingObject.moClass];
-        
-        NSMutableSet *set = [NSMutableSet new];
-        
-        // loop over json objects which are nested in the base object itmes:[{obj},{obj},...],
-        [records enumerateObjectsUsingBlock:^(id record, NSUInteger idx, BOOL *stop) {
+    for (AWSyncMappingObject *relatedMappingObject in relatedMappingObjects) {
+        if(relatedMappingObject.doUpdate){
+            // get a set of all existinc related objects
+            NSSet *existingRelatedObjects = [existingObject valueForKey:relatedMappingObject.relatedJsonRootAttributeName];
+            // set delete flag for all related objects
+            [self setDeleteFlagForObjectsInSet:existingRelatedObjects forObjectClass:relatedMappingObject.objectClass];
             
-            NSManagedObject* existingRelatedObject = [self getMatchingObjectInSet:existingRelatedObjects inRecord:record forMappingObject:relatedMappingObject];
+            NSMutableSet *set = [NSMutableSet new];
             
-            if (existingRelatedObjects == nil) {
-                existingRelatedObject = [self createManagedObjectForObject:relatedMappingObject forRecord:record];
-            }else { // object does exist -> update values
-                [self setAttributes:relatedMappingObject.attributesMappingDictionary fromRecords:record forObject:existingRelatedObject];
-            }
-            [self removeDeleteFlagOnObject:existingRelatedObject];
-            [set addObject:existingRelatedObject];
-        }];
-        if ([set count] != 0)
-            [existingObject setValue:set forKey:relatedMappingObject.relatedJsonRootAttributeName];
-        [self deleteFlagedRecordsForClass:relatedMappingObject.moClass inContext:_backgroundManagedObjectContext];
+            NSArray *jsonObjects = [records objectForKey:relatedMappingObject.jsonRootAttribute];
+            // loop over json objects which are nested in the base object itmes:[{obj},{obj},...],
+            [jsonObjects enumerateObjectsUsingBlock:^(id record, NSUInteger idx, BOOL *stop) {
+                
+                NSManagedObject* existingRelatedObject = [self getMatchingObjectInSet:existingRelatedObjects inRecord:record forMappingObject:relatedMappingObject];
+                
+                if (!existingRelatedObject) {
+                    existingRelatedObject = [self createManagedObjectForObject:relatedMappingObject forRecord:record];
+                }else { // object does exist -> update values
+                    [self setAttributes:relatedMappingObject.attributeMapping fromRecords:record forObject:existingRelatedObject];
+                }
+                [self removeDeleteFlagOnObject:existingRelatedObject];
+                [set addObject:existingRelatedObject];
+            }];
+            if ([set count] != 0)
+                [existingObject setValue:set forKey:relatedMappingObject.relatedJsonRootAttributeName];
+            [self deleteFlagedRecordsForClass:relatedMappingObject.objectClass inContext:_backgroundManagedObjectContext];
+        }
     }
-
 }
 
 - (void)updateOrInsertObject:(AWSyncMappingObject *)mObject forRecordsInArray:(NSArray*)records
@@ -419,34 +440,30 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
     NSArray *filteredJsonPropertyValues = [records valueForKey:mObject.uniqueJsonAttributeName];
     NSArray *jsonPropertyValues = [filteredJsonPropertyValues sortedArrayUsingSelector:@selector(compare:)];
 
-    NSDictionary *matchingRecords = [self getMatchingRecordsForObject:mObject andJsonRecords:records];
+    NSArray *matchingRecords = [self getMatchingRecordsForObject:mObject andJsonRecords:records];
     
     //?todo: is it possible to skip creating array of json values and use the object instead?
     
-    // Iterate over both arrays to find inserts and updates
-    BOOL isUpdate = YES;
+    BOOL doesExist = YES;
     NSManagedObject *existingObject;
-    id existingObjectKey;
     
-    NSEnumerator *matchingObjectsEnum = [matchingRecords keyEnumerator];
+     // Iterate over both arrays to find inserts and updates
+    NSEnumerator *matchingObjectsEnum = [matchingRecords objectEnumerator];
     for (id jsonValue in jsonPropertyValues) {
         // go only to the next object when there was an update / was there an insert before deal with same object again
-        if (isUpdate) {
-            existingObjectKey = [matchingObjectsEnum nextObject];
-            existingObject = [matchingRecords objectForKey:existingObjectKey];
+        if (doesExist) {
+            existingObject = [matchingObjectsEnum nextObject];
         }
-        isUpdate = [self jsonValue:jsonValue isEqualTo:existingObjectKey];
-//        // Todo: unused at the moment, find what was the perpuse of that
-//        id updateKeyPropertyValue = [self getPropertyValueForUniqueProperty:mObject.uniquePropertyName ofObject:existingObject];
+        id updateKeyPropertyValue = [self getPropertyValueForUniqueProperty:mObject.uniquePropertyName ofObject:existingObject];
+        
+        doesExist = [self jsonValue:jsonValue isEqualTo:updateKeyPropertyValue];
         
         NSDictionary *jsonRecord = [self getJsonObjectInRecords:records forKey:mObject.uniqueJsonAttributeName andValue:jsonValue];
         
-        if (isUpdate) {
+        if (existingObject) {
             /* update objects without relation */
             if ([mObject.relatedMappingObjects count] == 0) {
-                [self setAttributes:mObject.attributesMappingDictionary fromRecords:jsonRecord forObject:existingObject];
-                [self setAttributes:mObject.setKeysToValuesOnUpdate forObject:existingObject];
-                [self removeDeleteFlagOnObject:existingObject];
+                [self updateObject:existingObject withRecords:jsonRecord withMapping:mObject];
             }
             /* update objects with relation */
             else {
@@ -455,19 +472,33 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
                     // TODO: update parent object = yes  do update partent object todo: add parent update logic (like above?)
                 }
                 /* Updating related object */
-                else if (mObject.relatedMappingObjects != nil){
-                    for (AWSyncMappingObject *relatedMappingObject in mObject.relatedMappingObjects) {
-                        [self updateOrInsertRelatedObject:relatedMappingObject
-                                        forExistingObject:existingObject
-                                               withRecord:[jsonRecord objectForKey:relatedMappingObject.jsonRootAttribute]];
-                    }
+                else if (mObject.relatedMappingObjects != nil) {
+                    [self updateOrInsertRelatedObjects:mObject.relatedMappingObjects
+                                    forExistingObject:existingObject
+                                           withRecord:jsonRecord];
                 }
             }
-        }else
+        } else {
             [self createManagedObjectForObject:mObject forRecord:jsonRecord];
+        }
     }
 }
 
+- (void)updateObject:(NSManagedObject*)object withRecords:(NSDictionary*)jsonRecord withMapping:(AWSyncMappingObject*)mObject
+{
+    // todo only update when update rule true
+    NSDate *jsonRecordUpdated = [self parseDate:[jsonRecord objectForKey:mObject.updateRuleAttribute]];
+    NSDate *objectUpdatedDate = [object valueForKey:mObject.updateRuleProperty];
+    //
+    if ([objectUpdatedDate compare:jsonRecordUpdated ] == mObject.updateComparisonResult) {
+        [self setAttributes:mObject.attributeMapping fromRecords:jsonRecord forObject:object];
+        if (mObject.resetProperty) {
+            [self setAttributes:@{mObject.resetProperty: mObject.resetToValue} forObject:object];
+        }
+    }
+    
+    [self removeDeleteFlagOnObject:object];
+}
 
 - (void)setDeleteFlagForObjectsInSet:(NSSet*)objectSet forObjectClass:(Class)class
 {
@@ -502,7 +533,7 @@ NSString * const kAppDomain = @"private.AWSyncEngine";
     return compareResult;
 }
 
-- (void)setAttributes:(NSDictionary*)attributes  fromRecords:(NSDictionary*)record forObject:(NSManagedObject*)object
+- (void)setAttributes:(NSDictionary*)attributes fromRecords:(NSDictionary*)record forObject:(NSManagedObject*)object
 {
     [attributes enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
         [self setValue:[record valueForKey:obj] forKey:key forManagedObject:object];

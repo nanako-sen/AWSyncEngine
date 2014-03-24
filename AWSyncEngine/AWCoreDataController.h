@@ -12,7 +12,7 @@
 @interface AWCoreDataController : NSObject
 
 
-//+ (id)sharedInstance;
++ (id)sharedInstance;
 
 - (NSURL *)applicationDocumentsDirectory;
 

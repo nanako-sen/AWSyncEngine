@@ -11,9 +11,10 @@
 @interface AWSyncEnginePush : AWSyncEngineBase
 
 @property (atomic, readonly) BOOL syncInProgress;
+
 + (AWSyncEnginePush*)sharedEngine;
 - (void)startSync;
-- (NSDate*)lastSyncPushDate;
+- (NSDate*)lastSyncedDate;
 
 
 @end

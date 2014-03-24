@@ -10,21 +10,14 @@
 
 NSString * const kSDSyncEngineSyncStartedNotificationNamePush = @"SDSyncEngineSyncPushStarted";
 NSString * const kSDSyncEngineSyncCompletedNotificationNamePush = @"SDSyncEngineSyncPushCompleted";
-NSString * const kSyncInProgressProperty = @"syncPushInProgress";
 
 @interface AWSyncEnginePush (){
     NSArray * _result;
     NSManagedObjectContext *_managedObjectContext;
 }
-@property (nonatomic, strong) NSString *syncInProgressProperty;
-
-@property (atomic, assign) BOOL syncInProgress;
 @end
 
 @implementation AWSyncEnginePush
-
-@synthesize syncInProgress = _syncInProgress;
-
 
 + (AWSyncEnginePush*)sharedEngine
 {
@@ -40,17 +33,19 @@ NSString * const kSyncInProgressProperty = @"syncPushInProgress";
 - (id)init
 {
     if (self = [super init]) {
-        self.syncInProgress = NO;
+        _syncInProgress = NO;
         self.requestMethod = kPOST;
-        self.syncInProgressProperty = kSyncInProgressProperty;
+        _syncInProgressProperty = @"syncPushInProgress";
     }
     return self;
 }
 
 - (void)startSync
 {
+    [self checkBaseURL];
     NSError *error = nil;
     if ([self initalizeSyncError:&error]) {
+        [self setSyncInProgress];
         [[NSNotificationCenter defaultCenter]
          postNotificationName:kSDSyncEngineSyncStartedNotificationNamePush
          object:nil];

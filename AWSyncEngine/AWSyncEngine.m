@@ -8,18 +8,13 @@
 
 #import "AWSyncEngine.h"
 
-NSString * const kSDSyncEngineInitialCompleteKey = @"SDSyncEngineInitialSyncCompleted";
 NSString * const kSDSyncEngineSyncCompletedNotificationName = @"SDSyncEngineSyncCompleted";
-NSString * const kSyncInProgressProperty = @"syncInProgress";
 
 #define kSyncInterval 3600*24*1
 
 @interface AWSyncEngine (){
     NSArray * _result;
 }
-
-@property (atomic, assign) BOOL syncInProgress;
-@property (nonatomic, strong) NSString *syncInProgressProperty;
 
 @end
 
@@ -41,11 +36,11 @@ NSString * const kSyncInProgressProperty = @"syncInProgress";
 - (id)init
 {
     if (self = [super init]) {
-        self.syncInProgress = NO;
+        _syncInProgress = NO;
         self.syncInterval = kSyncInterval;
-        self.coreDataController = [AWCoreDataController new];
+        self.coreDataController = [AWCoreDataController sharedInstance];
         self.requestMethod = kGET;
-        self.syncInProgressProperty = kSyncInProgressProperty;
+        _syncInProgressProperty = @"syncInProgress";
     }
     return self;
 }
@@ -53,8 +48,10 @@ NSString * const kSyncInProgressProperty = @"syncInProgress";
 - (void)startSync
 {
     /* reachability check doesn't work like expected, it gets handled in app delegate */
+    [self checkBaseURL];
     NSError *error = nil;
     if ([self initalizeSyncError:&error]) {
+        [self setSyncInProgress];
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
             [self syncObjects];
         });
